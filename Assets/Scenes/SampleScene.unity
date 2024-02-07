@@ -196,7 +196,7 @@ MonoBehaviour:
   RectTransform: {fileID: 0}
   PixelViewPrefab: {fileID: 752875683}
   GridLayoutGroup: {fileID: 288982640}
-  DelaySeconds: 0.07
+  DelaySeconds: 0.1
   TimeInSeconds: 10
 --- !u!114 &288982640
 MonoBehaviour:

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,7 +17,7 @@ public class MapView : MonoBehaviour
     private SandClock _sandClock;
     private Map _map;
 
-    private float _nextUpdateTime;
+    private float _prevUpdateTime;
     
     private void Start()
     {
@@ -45,18 +46,53 @@ public class MapView : MonoBehaviour
                 _pixels[pos] = pixelView;
             }
         }
+        
+        _sandClock.Simulate(Vector2.one);
     }
 
     private float _nextOpenTime;
+
+    public static float Map(float value, float fromMin, float fromMax, float toMin, float toMax)
+    {
+        // Спершу відобразимо вхідне значення на діапазон від 0 до 1
+        float normalized = (value - fromMin) / (fromMax - fromMin);
+        
+        // Потім відобразимо його на вихідний діапазон
+        return toMin + normalized * (toMax - toMin);
+    }
+    
+    private float GetDelayBetweenUpdates(Vector3 acceleration)
+    {
+        float z = MathF.Abs(acceleration.z);
+        z = Math.Clamp(z, 0, 1);
+
+        if (z <= 0.6)
+            return DelaySeconds;
+
+        if (z > 0.6 && z <= 0.9)
+            return Map(z, 0.6f, 0.9f, DelaySeconds, 0.5f);
+
+        if (z > 0.9 && z <= 0.95)
+            return Map(z, 0.9f, 0.95f, 0.5f, 1);
+        
+        return Map(z, 0.95f, 1, 1, 10);
+    }
     
     void Update()
     {
-        float time = Time.time;
+        Vector3 acceleration = Quaternion.Euler(0, 0, 45) * Input.acceleration;
         
-        if (time < _nextUpdateTime)
-            return;
+        float time = Time.time;
 
-        _nextUpdateTime = time + DelaySeconds;
+        float delay = GetDelayBetweenUpdates(acceleration);
+        float diff = time - _prevUpdateTime;
+        
+        if (diff < delay)
+            return;
+        
+        Debug.Log($"Diff: {diff}, Delay: {delay}");
+        
+        _prevUpdateTime = time;
 
         if (time > _nextOpenTime)
         {
@@ -67,10 +103,12 @@ public class MapView : MonoBehaviour
             _sandClock.SetTransitionEnabled(true);
         }
         
-        float angle = Vector2.SignedAngle(transform.up, Vector2.up);
-        angle -= 90;
+        // float angle = Vector2.SignedAngle(transform.up, Vector2.up);
+        // angle -= 90;
+        //_sandClock.Simulate(SandClock.AngleToDirection(angle));
         
-        _sandClock.Simulate(SandClock.AngleToDirection(angle));
+        _sandClock.Simulate(acceleration);
+        Debug.Log(Input.acceleration);
         
         foreach (var pair in _pixels)
         {
