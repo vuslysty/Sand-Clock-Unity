@@ -6,7 +6,7 @@ using UnityEngine;
 public class Map
 {
     private readonly Dictionary<Vector2Int, bool> _data = new();
-    private readonly Dictionary<Vector2Int, int> _bakeData = new();
+    private readonly Dictionary<Vector2Int, uint> _bakeData = new();
     
     private Vector2Int _min;
     private Vector2Int _max;
@@ -20,23 +20,24 @@ public class Map
         
         foreach (var cell in cells)
         {
-            var bakeIndex = new Vector2Int(cell.Position.x / 4, cell.Position.y / 4);
-            int value = _bakeData.GetValueOrDefault(bakeIndex, 0);
-            int shift = 4 * (cell.Position.x % 4) + cell.Position.y % 4;
+            Vector2Int bakeIndex = GetBakeIndex(cell.Position);
+            uint value = _bakeData.GetValueOrDefault(bakeIndex, 0u);
             
-            value |= 1 << shift;
+            value |= (uint)(1 << GetShift(cell.Position));
             _bakeData[bakeIndex] = value;
         }
     }
 
     public bool HasInBakeDataAt(Vector2Int pos)
     {
-        var bakeIndex = new Vector2Int(pos.x / 4, pos.y / 4);
-        Int64 value = _bakeData.GetValueOrDefault(bakeIndex, 0);
-        int shift = 4 * (pos.x % 4) + pos.y % 4;
-
-        return (value & (1 << shift)) != 0;
+        uint value = _bakeData.GetValueOrDefault(GetBakeIndex(pos), 0u);
+        
+        return (value & (1 << GetShift(pos))) != 0;
     }
+
+    public int GetShift(Vector2Int pos) => pos.x % 8 + (pos.y % 4) * 8;
+
+    public Vector2Int GetBakeIndex(Vector2Int pos) => new(pos.x / 8, pos.y / 4);
     
     public void AddData(Vector2Int position, bool isMovable)
     {

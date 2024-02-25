@@ -6,6 +6,18 @@ using VectorInt2 = UnityEngine.Vector2Int;
 
 public class SandClock
 {
+    private readonly VectorInt2[] _directions = new[]
+    {
+        new VectorInt2(1, 0),
+        new VectorInt2(1, 1),
+        new VectorInt2(0, 1),
+        new VectorInt2(-1, 1),
+        new VectorInt2(-1, 0),
+        new VectorInt2(-1, -1),
+        new VectorInt2(0, -1),
+        new VectorInt2(1, -1),
+    };
+    
     readonly VectorInt2[] _quadrant1 = { new(1, 0), new(1, 1), new(0, 1), new(-1, 1), new(1, -1) };
     readonly VectorInt2[] _quadrant2 = { new(0, 1), new(-1, 1), new(-1, 0), new(-1, -1), new(1, 1) };
     readonly VectorInt2[] _quadrant3 = { new(-1, 0), new(-1, -1), new(0, -1), new(1, -1), new(-1, 1) };
@@ -116,7 +128,8 @@ public class SandClock
             {
                 if (_cellsMap.TryGetValue(nextPos, out Cell nextPosCell))
                 {
-                    TryMakeMove(cell, angleInDegrees, nextPos);
+                    if (TryMakeMove(cell, angleInDegrees, nextPos))
+                        cell.IsFalling = false;
                 }
                 else if (_map.HasInBakeDataAt(nextPos))
                 {
@@ -139,8 +152,8 @@ public class SandClock
             }
             else
             {
-                // Need add a logic for falling in right place
-                TryMakeMove(cell, angleInDegrees, nextPos);
+                if (TryMakeMove(cell, angleInDegrees, nextPos))
+                    cell.IsFalling = false;
             }
         }
     }
@@ -297,6 +310,20 @@ public class SandClock
             return _quadrant3;
         if (angleInDegrees is >= 270 and < 360)
             return _quadrant4;
+
+        throw new ArgumentException("Invalid angle. Angle must be in the range [0, 360).");
+    }
+
+    byte GetIndexForAngle(float angleInDegrees)
+    {
+        if (angleInDegrees is >= 0 and < 90)
+            return 1;
+        if (angleInDegrees is >= 90 and < 180)
+            return 3;
+        if (angleInDegrees is >= 180 and < 270)
+            return 5;
+        if (angleInDegrees is >= 270 and < 360)
+            return 7;
 
         throw new ArgumentException("Invalid angle. Angle must be in the range [0, 360).");
     }
