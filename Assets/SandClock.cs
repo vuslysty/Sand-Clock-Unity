@@ -17,11 +17,6 @@ public class SandClock
         new VectorInt2(0, -1),
         new VectorInt2(1, -1),
     };
-    
-    readonly VectorInt2[] _quadrant1 = { new(1, 0), new(1, 1), new(0, 1), new(-1, 1), new(1, -1) };
-    readonly VectorInt2[] _quadrant2 = { new(0, 1), new(-1, 1), new(-1, 0), new(-1, -1), new(1, 1) };
-    readonly VectorInt2[] _quadrant3 = { new(-1, 0), new(-1, -1), new(0, -1), new(1, -1), new(-1, 1) };
-    readonly VectorInt2[] _quadrant4 = { new(0, -1), new(1, -1), new(1, 0), new(1, 1), new(-1, -1) };
 
     readonly VectorInt2[] _buffer = new VectorInt2[4];
 
@@ -29,7 +24,49 @@ public class SandClock
     public readonly Dictionary<Vector2Int, Cell> _cellsMap = new Dictionary<Vector2Int, Cell>();
     readonly List<Cell> _cells = new List<Cell>();
     private readonly HashSet<(VectorInt2, VectorInt2)> _closedTransitions = new HashSet<(VectorInt2, VectorInt2)>();
+    
+    private uint [,] _bakeData = null;
 
+    private void BakeData()
+    {
+        if (_bakeData == null)
+        {
+            VectorInt2 min = GetBakeIndex(_map.Min);
+            VectorInt2 max = GetBakeIndex(_map.Max);
+
+            _bakeData = new uint[max.x - min.x + 1, max.y - min.y + 1];
+        }
+        
+        for (int i = 0; i < _bakeData.GetLength(0); i++)
+        {
+            for (int j = 0; j < _bakeData.GetLength(1); j++)
+            {
+                _bakeData[i, j] = 0;
+            }
+        }
+        
+        foreach (var cell in _cells)
+        {
+            Vector2Int bakeIndex = GetBakeIndex(cell.Position);
+            uint value = _bakeData[bakeIndex.x, bakeIndex.y];
+            
+            value |= (uint)(1 << GetShift(cell.Position));
+            _bakeData[bakeIndex.x, bakeIndex.y] = value;
+        }
+    }
+
+    private bool HasInBakeDataAt(Vector2Int pos)
+    {
+        Vector2Int bakeIndex = GetBakeIndex(pos);
+        uint value = _bakeData[bakeIndex.x, bakeIndex.y];
+        
+        return (value & (1 << GetShift(pos))) != 0;
+    }
+
+    private int GetShift(Vector2Int pos) => pos.x % 8 + (pos.y % 4) * 8;
+
+    private Vector2Int GetBakeIndex(Vector2Int pos) => new(pos.x / 8, pos.y / 4);
+    
     bool IsClosedTransition(VectorInt2 posA, VectorInt2 posB)
     {
         foreach (var tuple in _closedTransitions)
@@ -102,8 +139,7 @@ public class SandClock
 
     public void Simulate(Vector2 direction)
     {
-        _map.BakeData(_cells);
-        _cells.ForEach(cell => cell.CantMove = false);
+        BakeData();
 
         float angleInDegrees = DirectionToDegrees(direction);
         
@@ -131,7 +167,7 @@ public class SandClock
                     if (TryMakeMove(cell, angleInDegrees, nextPos))
                         cell.IsFalling = false;
                 }
-                else if (_map.HasInBakeDataAt(nextPos))
+                else if (HasInBakeDataAt(nextPos))
                 {
                     continue;
                 }
@@ -300,39 +336,20 @@ public class SandClock
         }
     }
 
-    VectorInt2[] GetQuadrantForAngle(float angleInDegrees)
+    int GetIndexForAngle(float angleInDegrees)
     {
-        if (angleInDegrees is >= 0 and < 90)
-            return _quadrant1;
-        if (angleInDegrees is >= 90 and < 180)
-            return _quadrant2;
-        if (angleInDegrees is >= 180 and < 270)
-            return _quadrant3;
-        if (angleInDegrees is >= 270 and < 360)
-            return _quadrant4;
-
-        throw new ArgumentException("Invalid angle. Angle must be in the range [0, 360).");
+        angleInDegrees %= 360;
+        var round = (int)(angleInDegrees / 90f) % 4;
+        return round * 2 + 1;
     }
 
-    byte GetIndexForAngle(float angleInDegrees)
-    {
-        if (angleInDegrees is >= 0 and < 90)
-            return 1;
-        if (angleInDegrees is >= 90 and < 180)
-            return 3;
-        if (angleInDegrees is >= 180 and < 270)
-            return 5;
-        if (angleInDegrees is >= 270 and < 360)
-            return 7;
-
-        throw new ArgumentException("Invalid angle. Angle must be in the range [0, 360).");
-    }
+    int GetIndexOffset(int index, int offset) => ((index + offset) % 8 + 8) % 8;
 
     int GetSortedMovePoints(float angleInDegrees, VectorInt2[] buff)
     {
         const float N = 1;
 
-        VectorInt2[] quadrant = GetQuadrantForAngle(angleInDegrees);
+        int quadrantIndex = GetIndexForAngle(angleInDegrees);
         float angleFrom0To90 = angleInDegrees % 90;
 
         float distToFirst = MathF.Abs(angleInDegrees - 0);
@@ -345,13 +362,13 @@ public class SandClock
         {
             if (distToFirst < distToSecond)
             {
-                buff[0] = quadrant[0];
-                buff[1] = quadrant[1];
+                buff[0] = _directions[GetIndexOffset(quadrantIndex, -1)];
+                buff[1] = _directions[quadrantIndex];
             }
             else
             {
-                buff[0] = quadrant[1];
-                buff[1] = quadrant[0];
+                buff[0] = _directions[quadrantIndex];
+                buff[1] = _directions[GetIndexOffset(quadrantIndex, -1)];
             }
 
             amount = 2;
@@ -360,13 +377,13 @@ public class SandClock
         {
             if (distToSecond < distToThird)
             {
-                buff[0] = quadrant[1];
-                buff[1] = quadrant[2];
+                buff[0] = _directions[quadrantIndex];
+                buff[1] = _directions[GetIndexOffset(quadrantIndex, 1)];
             }
             else
             {
-                buff[0] = quadrant[2];
-                buff[1] = quadrant[1];
+                buff[0] = _directions[GetIndexOffset(quadrantIndex, 1)];
+                buff[1] = _directions[quadrantIndex];
             }
 
             amount = 2;
@@ -377,31 +394,31 @@ public class SandClock
             {
                 if (distToSecond < distToThird)
                 {
-                    buff[0] = quadrant[1];
-                    buff[1] = quadrant[2];
+                    buff[0] = _directions[quadrantIndex];
+                    buff[1] = _directions[GetIndexOffset(quadrantIndex, 1)];
                 }
                 else
                 {
-                    buff[0] = quadrant[2];
-                    buff[1] = quadrant[1];
+                    buff[0] = _directions[GetIndexOffset(quadrantIndex, 1)];
+                    buff[1] = _directions[quadrantIndex];
                 }
 
-                buff[2] = quadrant[0];
+                buff[2] = _directions[GetIndexOffset(quadrantIndex, -1)];
             }
             else
             {
                 if (distToFirst < distToSecond)
                 {
-                    buff[0] = quadrant[0];
-                    buff[1] = quadrant[1];
+                    buff[0] = _directions[GetIndexOffset(quadrantIndex, -1)];
+                    buff[1] = _directions[quadrantIndex];
                 }
                 else
                 {
-                    buff[0] = quadrant[1];
-                    buff[1] = quadrant[0];
+                    buff[0] = _directions[quadrantIndex];
+                    buff[1] = _directions[GetIndexOffset(quadrantIndex, -1)];
                 }
 
-                buff[2] = quadrant[2];
+                buff[2] = _directions[GetIndexOffset(quadrantIndex, 1)];
             }
 
             amount = 3;
@@ -409,12 +426,12 @@ public class SandClock
 
         if (angleFrom0To90 > 50)
         {
-            buff[amount] = quadrant[3];
+            buff[amount] = _directions[GetIndexOffset(quadrantIndex, 2)];
             amount++;
         }
         else if (angleFrom0To90 < 40)
         {
-            buff[amount] = quadrant[4];
+            buff[amount] = _directions[GetIndexOffset(quadrantIndex, -2)];
             amount++;
         }
 
@@ -438,7 +455,7 @@ public class SandClock
             if (_cellsMap.TryGetValue(checkPoint, out Cell nextCell))
                 continue;
 
-            if (_map.HasInBakeDataAt(checkPoint))
+            if (HasInBakeDataAt(checkPoint))
                 return false;
 
             _cellsMap.Remove(cell.Position);
