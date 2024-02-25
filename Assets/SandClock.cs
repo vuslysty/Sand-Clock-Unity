@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using VectorInt2 = UnityEngine.Vector2Int;
 
@@ -43,17 +44,6 @@ public class SandClock
         {
             _closedTransitions.Add((a, b));
         }
-    }
-    
-    public bool IsFree(Vector2Int pos)
-    {
-        if (!_map.IsMovable(pos))
-            return false;
-
-        if (_cellsMap.TryGetValue(pos, out _))
-            return false;
-
-        return true;
     }
 
     public SandClock()
@@ -100,77 +90,59 @@ public class SandClock
 
     public void Simulate(Vector2 direction)
     {
-        _cells.ForEach(cell => cell.MakeMove = false);
+        _map.BakeData(_cells);
+        _cells.ForEach(cell => cell.CantMove = false);
 
         float angleInDegrees = DirectionToDegrees(direction);
-        int moves = 0;
         
-        do
+        List<Cell> sortedCells = _cells.OrderByDescending(cell => cell.Position.x * direction.x + cell.Position.y * direction.y).ToList();
+
+        foreach (var cell in sortedCells)
         {
-            moves = 0;
-
-            foreach (var cell in _cells)
+            // Try stop falling
+            if (cell.IsFalling)
             {
-                if (cell.MakeMove)
-                    continue;
+                VectorInt2 endFallPos = GetEndFallPos(cell.StartFallPosition, direction);
 
-                // Try stop falling
-                if (cell.IsFalling)
+                if (endFallPos != cell.EndFallPosition)
+                    cell.IsFalling = false;
+            }
+
+            VectorInt2 nextPos = cell.IsFalling
+                ? GetNextPointWhenFalling(cell.Position, cell.StartFallPosition, direction)
+                : GetNextPoint(cell.Position, direction);
+
+            if (_map.IsMovable(nextPos) && !IsClosedTransition(cell.Position, nextPos))
+            {
+                if (_cellsMap.TryGetValue(nextPos, out Cell nextPosCell))
                 {
-                    VectorInt2 endFallPos = GetEndFallPos(cell.StartFallPosition, direction);
-
-                    if (endFallPos != cell.EndFallPosition)
-                        cell.IsFalling = false;
+                    TryMakeMove(cell, angleInDegrees, nextPos);
                 }
-
-                VectorInt2 nextPos = cell.IsFalling
-                    ? GetNextPointWhenFalling(cell.Position, cell.StartFallPosition, direction)
-                    : GetNextPoint(cell.Position, direction);
-                
-                if (_map.IsMovable(nextPos) && !IsClosedTransition(cell.Position, nextPos))
+                else if (_map.HasInBakeDataAt(nextPos))
                 {
-                    if (_cellsMap.TryGetValue(nextPos, out Cell nextPosCell))
-                    {
-                        if (nextPosCell.MakeMove)
-                        {
-                            cell.IsFalling = false;
-
-                            // Need add a logic for falling in right place
-                            if (TryMakeMove(cell, angleInDegrees, nextPos))
-                            {
-                                moves++;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        _cellsMap.Remove(cell.Position);
-                        _cellsMap[nextPos] = cell;
-                        moves++;
-                        cell.MakeMove = true;
-
-                        if (!cell.IsFalling)
-                        {
-                            cell.IsFalling = true;
-                            cell.StartFallPosition = cell.Position;
-                            cell.EndFallPosition = GetEndFallPos(cell.Position, direction);
-                        }
-
-                        cell.Position = nextPos;
-                    }
+                    continue;
                 }
                 else
                 {
-                    cell.IsFalling = false;
+                    _cellsMap.Remove(cell.Position);
+                    _cellsMap[nextPos] = cell;
 
-                    // Need add a logic for falling in right place
-                    if (TryMakeMove(cell, angleInDegrees, nextPos))
+                    if (!cell.IsFalling)
                     {
-                        moves++;
+                        cell.IsFalling = true;
+                        cell.StartFallPosition = cell.Position;
+                        cell.EndFallPosition = GetEndFallPos(cell.Position, direction);
                     }
+
+                    cell.Position = nextPos;
                 }
             }
-        } while (moves > 0);
+            else
+            {
+                // Need add a logic for falling in right place
+                TryMakeMove(cell, angleInDegrees, nextPos);
+            }
+        }
     }
 
     static float AnglesToRadians(float degrees) => degrees * (MathF.PI / 180);
@@ -186,7 +158,7 @@ public class SandClock
         float x = MathF.Cos(angleRadians);
         float y = MathF.Sin(angleRadians);
 
-        return new Vector2(x, y).normalized;
+        return new Vector2(x, y);
     }
 
     public static float DirectionToDegrees(Vector2 direction)
@@ -437,21 +409,18 @@ public class SandClock
                 continue;
 
             if (_cellsMap.TryGetValue(checkPoint, out Cell nextCell))
-            {
-                if (!nextCell.MakeMove)
-                    return false;
-            }
-            else
-            {
-                _cellsMap.Remove(cell.Position);
-                _cellsMap[checkPoint] = cell;
-                cell.Position = checkPoint;
-                cell.MakeMove = true;
-                return true;
-            }
-        }
+                continue;
 
-        cell.MakeMove = true;
+            if (_map.HasInBakeDataAt(checkPoint))
+                return false;
+
+            _cellsMap.Remove(cell.Position);
+            _cellsMap[checkPoint] = cell;
+            cell.Position = checkPoint;
+            
+            return true;
+        }
+        
         return true;
     }
 }

@@ -8,7 +8,7 @@ public class Cell
     public Vector2Int StartFallPosition;
     public Vector2Int EndFallPosition;
 
-    public bool MakeMove;
+    public bool CantMove;
     
     public Vector2Int Position;
 }
