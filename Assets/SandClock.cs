@@ -339,8 +339,20 @@ public class SandClock
     int GetIndexForAngle(float angleInDegrees)
     {
         angleInDegrees %= 360;
-        var round = (int)(angleInDegrees / 90f) % 4;
-        return round * 2 + 1;
+        
+        if (angleInDegrees is >= 0 and < 90)
+            return 1;
+        if (angleInDegrees is >= 90 and < 180)
+            return 3;
+        if (angleInDegrees is >= 180 and < 270)
+            return 5;
+        if (angleInDegrees is >= 270 and < 360)
+            return 7;
+
+        throw new ArgumentException("Invalid angle. Angle must be in the range [0, 360).");
+        
+        // The same as above, but by formula. Leave a more readable version
+        return (int)(angleInDegrees / 90) * 2 + 1;
     }
 
     int GetIndexOffset(int index, int offset) => ((index + offset) % 8 + 8) % 8;
