@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using VectorInt2 = UnityEngine.Vector2Int;
 
@@ -142,10 +141,8 @@ public class SandClock
         BakeData();
 
         float angleInDegrees = DirectionToDegrees(direction);
-        
-        List<Cell> sortedCells = _cells.OrderByDescending(cell => cell.Position.x * direction.x + cell.Position.y * direction.y).ToList();
 
-        foreach (var cell in sortedCells)
+        foreach (var cell in _cells)
         {
             // Try stop falling
             if (cell.IsFalling)
@@ -157,8 +154,8 @@ public class SandClock
             }
 
             VectorInt2 nextPos = cell.IsFalling
-                ? GetNextPointWhenFalling(cell.Position, cell.StartFallPosition, direction)
-                : GetNextPoint(cell.Position, direction);
+                ? GetLinePointAtIteration(cell.StartFallPosition, direction, cell.FallingIndex + 1)
+                : GetLinePointAtIteration(cell.Position, direction, 1);
 
             if (_map.IsMovable(nextPos) && !IsClosedTransition(cell.Position, nextPos))
             {
@@ -179,8 +176,13 @@ public class SandClock
                     if (!cell.IsFalling)
                     {
                         cell.IsFalling = true;
+                        cell.FallingIndex = 1;
                         cell.StartFallPosition = cell.Position;
-                        cell.EndFallPosition = GetEndFallPos(cell.Position, direction);
+                        cell.EndFallPosition = GetEndFallPos(cell.StartFallPosition, direction);
+                    }
+                    else
+                    {
+                        cell.FallingIndex++;
                     }
 
                     cell.Position = nextPos;
@@ -188,8 +190,9 @@ public class SandClock
             }
             else
             {
-                if (TryMakeMove(cell, angleInDegrees, nextPos))
-                    cell.IsFalling = false;
+                cell.IsFalling = false;
+
+                TryMakeMove(cell, angleInDegrees, nextPos);
             }
         }
     }
@@ -230,60 +233,30 @@ public class SandClock
         Vector2 startFallPosCenter = startFallPos;
         startFallPosCenter += Vector2.one / 2;
 
-        Vector2 endFallCenter = startFallPosCenter + direction * 100;
+        Vector2 endFallCenter = startFallPosCenter + direction * 10;
         VectorInt2 endFallPos = new VectorInt2((int)endFallCenter.x, (int)endFallCenter.y);
 
         return endFallPos;
     }
-
-    VectorInt2 GetNextPoint(VectorInt2 currentPoint, Vector2 direction)
+    
+    VectorInt2 GetLinePointAtIteration(VectorInt2 start, Vector2 direction, int targetIteration)
     {
-        foreach (var point in GetLinePointsByDirection(currentPoint, direction, 1000))
-        {
-            if (point == currentPoint)
-                continue;
-
-            return point;
-        }
-
-        throw new Exception();
-    }
-
-    VectorInt2 GetNextPointWhenFalling(VectorInt2 currentPoint, VectorInt2 startFallPoint, Vector2 direction)
-    {
-        float prevDistance = Single.MaxValue;
-
-        foreach (VectorInt2 point in GetLinePointsByDirection(startFallPoint, direction, 1000))
-        {
-            float distance = Vector2.Distance(point, currentPoint);
-
-            if (distance > prevDistance && distance > 0.5f)
-                return point;
-
-            prevDistance = distance;
-        }
-
-        throw new Exception();
-    }
-
-    static IEnumerable<VectorInt2> GetLinePointsByDirection(VectorInt2 start, Vector2 direction, int count)
-    {
-        direction = direction.normalized;
-
         int x0 = start.x;
         int y0 = start.y;
 
-        int x1 = (int)(x0 + (count - 1) * direction.x);
-        int y1 = (int)(y0 + (count - 1) * direction.y);
+        int x1 = (int)(x0 + targetIteration * 10 * direction.x);
+        int y1 = (int)(y0 + targetIteration * 10 * direction.y);
 
-        foreach (VectorInt2 point in GetLinePoints(start, new VectorInt2(x1, y1)))
-        {
-            yield return point;
-        }
+        return GetLinePointAtIteration(start, new VectorInt2(x1, y1), targetIteration);
     }
-
-    static IEnumerable<VectorInt2> GetLinePoints(VectorInt2 start, VectorInt2 end)
+    
+    VectorInt2 GetLinePointAtIteration(VectorInt2 start, VectorInt2 end, int targetIteration)
     {
+        if (targetIteration <= 0)
+            return start;
+
+        int iterations = 0;
+        
         int x0 = start.x;
         int y0 = start.y;
 
@@ -295,13 +268,13 @@ public class SandClock
 
         int dx = Math.Abs(x1 - x0);
         int dy = Math.Abs(y1 - y0);
-
+        
         if (dy <= dx)
         {
             int d = (dy << 1) - dx;
             int d1 = dy << 1;
             int d2 = (dy - dx) << 1;
-            yield return new VectorInt2(x0, y0);
+            
             for (int x = x0 + sx, y = y0, i = 1; i <= dx; i++, x += sx)
             {
                 if (d > 0)
@@ -312,7 +285,10 @@ public class SandClock
                 else
                     d += d1;
 
-                yield return new VectorInt2(x, y);
+                iterations++;
+                
+                if (iterations == targetIteration)
+                    return new VectorInt2(x, y);
             }
         }
         else
@@ -320,7 +296,7 @@ public class SandClock
             int d = (dx << 1) - dy;
             int d1 = dx << 1;
             int d2 = (dx - dy) << 1;
-            yield return new VectorInt2(x0, y0);
+
             for (int y = y0 + sy, x = x0, i = 1; i <= dy; i++, y += sy)
             {
                 if (d > 0)
@@ -331,9 +307,14 @@ public class SandClock
                 else
                     d += d1;
 
-                yield return new VectorInt2(x, y);
+                iterations++;
+                
+                if (iterations == targetIteration)
+                    return new VectorInt2(x, y);
             }
         }
+
+        return end;
     }
 
     int GetIndexForAngle(float angleInDegrees)
