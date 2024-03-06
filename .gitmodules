@@ -1,0 +1,3 @@
+[submodule "Submodules/googleSheetToCodeGenerator"]
+	path = Submodules/googleSheetToCodeGenerator
+	url = https://github.com/vuslysty/googleSheetToCodeGenerator.git
